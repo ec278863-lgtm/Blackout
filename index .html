@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#070B16">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="BLACKOUT">
+<title>BLACKOUT – Know Before the Lights Go Off</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23070B16'/%3E%3Cpath d='M36 6 16 36h14l-4 22 22-32H34z' fill='%23FFD60A'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+:root{
+  --bg:#070B16; --panel:#0F1730; --line:#1E2A4A; --text:#EEF1F8; --dim:#98A2BC;
+  --yellow:#FFD60A; --green:#2ECC71; --amber:#FF9F1C; --red:#FF453A; --grey:#8A93A6;
+  --r:14px;
+}
+*{box-sizing:border-box;margin:0}
+[hidden]{display:none!important}
+html,body{height:100%}
+body{background:var(--bg);color:var(--text);font:16px/1.5 Roboto,"Segoe UI",system-ui,sans-serif;
+  padding-top:env(safe-area-inset-top);}
+button,select,input{font:inherit;color:inherit}
+main{max-width:640px;margin:0 auto;padding:16px 16px 96px}
+h1{font-size:1.15rem;font-weight:700;letter-spacing:.02em}
+h2{font-size:1.05rem;font-weight:600;margin-bottom:8px}
+.top{display:flex;align-items:center;gap:10px;padding:14px 16px;max-width:640px;margin:0 auto}
+.top svg{width:26px;height:26px}
+.top small{color:var(--dim);display:block;font-size:.78rem;line-height:1.2}
+.view{display:none}.view.on{display:block}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);padding:16px;margin-bottom:12px}
+.muted{color:var(--dim);font-size:.9rem}
+.lamp{display:flex;flex-direction:column;align-items:center;text-align:center;padding:26px 16px}
+.lamp svg{width:168px;height:168px}
+.lamp .state{font-size:1.5rem;font-weight:700;margin-top:10px}
+.lamp .where{color:var(--dim);margin-top:2px}
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:48px;padding:0 18px;border-radius:12px;
+  border:1px solid var(--line);background:var(--panel);cursor:pointer}
+.btn.primary{background:var(--yellow);color:#14110A;border-color:var(--yellow);font-weight:700}
+.btn.danger{color:var(--red)}
+.btn:focus-visible,select:focus-visible,input:focus-visible,nav button:focus-visible{outline:3px solid var(--yellow);outline-offset:2px}
+.row{display:flex;gap:10px;flex-wrap:wrap}.row>*{flex:1}
+label{display:block;font-size:.88rem;color:var(--dim);margin:12px 0 4px}
+select,input[type=text]{width:100%;min-height:48px;padding:0 12px;border-radius:12px;border:1px solid var(--line);background:#0A1126}
+.chk{display:flex;gap:10px;align-items:flex-start;margin:14px 0;color:var(--text);font-size:.92rem}
+.chk input{width:22px;height:22px;margin-top:2px;accent-color:var(--yellow)}
+.pill{display:inline-block;padding:2px 10px;border-radius:99px;font-size:.78rem;border:1px solid var(--line);color:var(--dim)}
+.pill.warn{color:var(--amber);border-color:var(--amber)}
+.item{display:flex;justify-content:space-between;gap:12px;padding:12px 0;border-bottom:1px solid var(--line)}
+.item:last-child{border-bottom:0}
+.dot{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:8px}
+#map{height:56vh;min-height:320px;border-radius:var(--r);border:1px solid var(--line)}
+nav{position:fixed;left:0;right:0;bottom:0;background:#0A1126;border-top:1px solid var(--line);display:flex;justify-content:center;
+  padding-bottom:env(safe-area-inset-bottom)}
+nav div{display:flex;width:100%;max-width:640px}
+nav button{flex:1;background:none;border:0;padding:10px 4px 8px;color:var(--dim);font-size:.78rem;cursor:pointer;min-height:56px}
+nav button svg{display:block;margin:0 auto 2px;width:22px;height:22px;fill:currentColor}
+nav button[aria-current=page]{color:var(--yellow)}
+#toast{position:fixed;left:50%;bottom:84px;transform:translateX(-50%);background:var(--yellow);color:#14110A;padding:10px 16px;border-radius:12px;font-weight:600;opacity:0;pointer-events:none;transition:opacity .2s;max-width:90%}
+#toast.on{opacity:1}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+@keyframes flick{0%,100%{opacity:1}50%{opacity:.55}}
+.lamp.unknown .bolt{animation:flick 2.4s ease-in-out infinite}
+</style>
+</head>
+<body>
+<header class="top">
+  <svg viewBox="0 0 64 64" aria-hidden="true"><path d="M36 6 16 36h14l-4 22 22-32H34z" fill="#FFD60A"/></svg>
+  <div><h1>BLACKOUT</h1><small data-t="tagline"></small></div>
+</header>
+
+<main>
+<!-- HOME -->
+<section class="view on" id="v-home" aria-label="Home">
+  <div class="card lamp unknown" id="lamp"></div>
+  <div class="card">
+    <h2 data-t="quick"></h2>
+    <div class="row">
+      <button class="btn primary" id="qOff" type="button" data-t="reportOff"></button>
+      <button class="btn" id="qOn" type="button" data-t="reportOn"></button>
+    </div>
+    <p class="muted" style="margin-top:10px" data-t="reportNote"></p>
+  </div>
+  <div class="card">
+    <h2 data-t="official"></h2>
+    <p class="muted" data-t="noOfficial"></p>
+  </div>
+  <div class="card">
+    <h2 data-t="risk"></h2>
+    <p class="muted" data-t="noRisk"></p>
+  </div>
+</section>
+
+<!-- MAP -->
+<section class="view" id="v-map" aria-label="Map">
+  <div id="map"></div>
+  <p class="muted" style="margin-top:10px" data-t="mapNote"></p>
+</section>
+
+<!-- REPORT -->
+<section class="view" id="v-report" aria-label="Report">
+  <div class="card">
+    <h2 data-t="newReport"></h2>
+    <label for="rType" data-t="whatHappened"></label>
+    <select id="rType">
+      <option value="POWER_OFF" data-t="optOff"></option>
+      <option value="POWER_RESTORED" data-t="optOn"></option>
+    </select>
+    <label for="rScope" data-t="howWide"></label>
+    <select id="rScope">
+      <option value="NEIGHBOURHOOD" data-t="scNb"></option>
+      <option value="SINGLE_BUILDING" data-t="scBld"></option>
+      <option value="LOCAL_FAULT" data-t="scFault"></option>
+    </select>
+    <label for="rPlace" data-t="forPlace"></label>
+    <select id="rPlace"></select>
+    <label class="chk"><input type="checkbox" id="rGeo"><span data-t="geoConsent"></span></label>
+    <button class="btn primary" id="rSend" type="button" style="width:100%" data-t="saveReport"></button>
+    <p class="muted" style="margin-top:10px" id="rHint"></p>
+  </div>
+</section>
+
+<!-- HISTORY -->
+<section class="view" id="v-history" aria-label="History">
+  <div class="card">
+    <h2 data-t="yourReports"></h2>
+    <div id="hList"></div>
+  </div>
+  <button class="btn danger" id="hClear" type="button" data-t="clearAll"></button>
+</section>
+
+<!-- PLACES / PROFILE -->
+<section class="view" id="v-places" aria-label="Places">
+  <div class="card" id="installCard">
+    <h2 data-t="installTitle"></h2>
+    <p class="muted" data-t="installText"></p>
+    <button class="btn primary" id="installBtn" type="button" style="width:100%;margin-top:12px" data-t="installBtn" hidden></button>
+  </div>
+  <div class="card">
+    <h2 data-t="addPlace"></h2>
+    <label for="pRegion" data-t="region"></label>
+    <select id="pRegion"></select>
+    <label for="pName" data-t="community"></label>
+    <input type="text" id="pName" maxlength="80" autocomplete="off" placeholder="e.g. Madina, Adenta, Kejetia">
+    <button class="btn primary" id="pAdd" type="button" style="width:100%;margin-top:14px" data-t="savePlace"></button>
+  </div>
+  <div class="card">
+    <h2 data-t="savedPlaces"></h2>
+    <div id="pList"></div>
+  </div>
+  <div class="card">
+    <h2 data-t="privacy"></h2>
+    <p class="muted" data-t="privacyText"></p>
+  </div>
+</section>
+</main>
+
+<div id="toast" role="status" aria-live="polite"></div>
+
+<nav aria-label="Main">
+  <div>
+    <button data-go="home" aria-current="page"><svg viewBox="0 0 24 24"><path d="M12 3 2 12h3v8h5v-5h4v5h5v-8h3z"/></svg><span data-t="navHome"></span></button>
+    <button data-go="map"><svg viewBox="0 0 24 24"><path d="M12 2a7 7 0 0 0-7 7c0 5 7 13 7 13s7-8 7-13a7 7 0 0 0-7-7zm0 9.5A2.5 2.5 0 1 1 12 6a2.5 2.5 0 0 1 0 5.500z"/></svg><span data-t="navMap"></span></button>
+    <button data-go="report"><svg viewBox="0 0 24 24"><path d="M13 2 4 14h6l-1 8 9-12h-6z"/></svg><span data-t="navReport"></span></button>
+    <button data-go="history"><svg viewBox="0 0 24 24"><path d="M13 3a9 9 0 1 0 9 9h-2a7 7 0 1 1-2-4.900L14 10h8V2l-3.100 3.100A9 9 0 0 0 13 3zm-1 5v5l4 2 .8-1.500-3.300-1.700V8z"/></svg><span data-t="navHistory"></span></button>
+    <button data-go="places"><svg viewBox="0 0 24 24"><path d="M12 12a5 5 0 1 0 0-10 5 5 0 0 0 0 10zm0 2c-4 0-8 2-8 5v3h16v-3c0-3-4-5-8-5z"/></svg><span data-t="navPlaces"></span></button>
+  </div>
+</nav>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+"use strict";
+/* ---------- Config ----------
+   Leave empty to run fully on-device. When the Supabase backend exists, fill both in.
+   The anon key is public by design; Row Level Security must protect the table.
+   Never put a service-role key here. */
+const CONFIG = { SUPABASE_URL: "", SUPABASE_ANON_KEY: "" };
+
+/* ---------- Localisation (add languages here) ---------- */
+const STR = { en: {
+  tagline:"Know before the lights go off.",
+  quick:"Report what’s happening", reportOff:"Power is off", reportOn:"Power is back",
+  reportNote:"Reports are saved on your device and marked unverified until confirmed by other signals.",
+  official:"Official maintenance", noOfficial:"No official announcements have been loaded. BLACKOUT will show ECG and GRIDCo notices here once the source monitor is connected.",
+  risk:"Outage risk", noRisk:"Insufficient data to produce a reliable prediction.",
+  mapNote:"The map shows only reports saved on this device. Community and official layers appear when the backend is connected.",
+  newReport:"New report", whatHappened:"What happened?", optOff:"Power went off", optOn:"Power came back",
+  howWide:"How far does it reach?", scNb:"Whole neighbourhood", scBld:"Only my building", scFault:"Possible fault in my wiring",
+  forPlace:"Place", geoConsent:"Attach my approximate location (about 100 m) to this report. Optional.",
+  saveReport:"Save report", yourReports:"Your reports", clearAll:"Delete all reports on this device",
+  addPlace:"Add a place", region:"Region", community:"Community or town", savePlace:"Save place",
+  savedPlaces:"Saved places", privacy:"Privacy",
+  privacyText:"Everything is stored in this browser only. Your location is never shared unless you tick the box on a report, and it is rounded before saving.",
+  navHome:"Home", navMap:"Map", navReport:"Report", navHistory:"History", navPlaces:"Places",
+  unknown:"Status unknown", noVerified:"No verified information for", addFirst:"Add a place to get started",
+  lastReport:"Your last report", unverified:"unverified", synced:"synced", pending:"saved on device",
+  noReports:"No reports yet.", noPlaces:"No saved places yet.", remove:"Remove",
+  needPlace:"Add a place first.", saved:"Report saved.", dup:"You already sent that a moment ago.",
+  placeAdded:"Place saved.", placeExists:"That place is already saved.", needName:"Enter a community name.",
+  geoFail:"Could not get location. Report saved without it.", hintNoPlace:"Add a place under Places before reporting.",
+  confirmClear:"Delete all reports from this device?", off:"Power off", on:"Power restored",
+  nb:"Whole neighbourhood", bld:"Single building", fault:"Possible local fault", ago:"ago", now:"just now",
+  installTitle:"Install BLACKOUT", installText:"Add BLACKOUT to your home screen to open it like an app. If no Install button appears, open your browser menu and choose “Add to Home screen” or “Install app”.", installBtn:"Install app",
+  mapOffline:"The map library could not load. Check your connection and reload.", noPins:"No located reports yet."
+}};
+let LANG = "en";
+const t = k => (STR[LANG] && STR[LANG][k]) || STR.en[k] || k;
+
+/* ---------- Ghana regions (communities are user-entered until a gazetteer is loaded) ---------- */
+const REGIONS = ["Ahafo","Ashanti","Bono","Bono East","Central","Eastern","Greater Accra","North East","Northern","Oti","Savannah","Upper East","Upper West","Volta","Western","Western North"];
+
+/* ---------- Safe storage ---------- */
+const store = {
+  get(k, d){ try{ const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; }catch(e){ return d; } },
+  set(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); return true; }catch(e){ return false; } }
+};
+let reports = store.get("bo_reports", []);
+let places  = store.get("bo_places", []);
+let selected = store.get("bo_selected", null);
+
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const uid = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36)+Math.random().toString(36).slice(2));
+
+function ago(ms){
+  const m = Math.max(0, Math.floor((Date.now()-ms)/60000));
+  if(m < 1) return t("now");
+  if(m < 60) return m+" min "+t("ago");
+  if(m < 1440) return Math.floor(m/60)+" h "+t("ago");
+  return Math.floor(m/1440)+" d "+t("ago");
+}
+function toast(msg){
+  const el = $("#toast"); el.textContent = msg; el.classList.add("on");
+  clearTimeout(toast._t); toast._t = setTimeout(()=>el.classList.remove("on"), 2600);
+}
+const label = {
+  type:  r => r.type === "POWER_OFF" ? t("off") : t("on"),
+  scope: r => ({NEIGHBOURHOOD:t("nb"),SINGLE_BUILDING:t("bld"),LOCAL_FAULT:t("fault")})[r.scope]
+};
+const place = p => p.name + ", " + p.region;
+
+/* ---------- Rendering ---------- */
+function renderStatic(){
+  document.querySelectorAll("[data-t]").forEach(el => { el.textContent = t(el.dataset.t); });
+}
+function renderLamp(){
+  const el = $("#lamp");
+  const sel = places.find(p => p.id === selected);
+  const bolt = '<path class="bolt" d="M92 34 62 88h22l-6 46 40-60H94z" fill="#FFD60A" opacity=".9"/>';
+  const ring = '<circle cx="84" cy="84" r="74" fill="none" stroke="#8A93A6" stroke-width="6" stroke-dasharray="3 9" stroke-linecap="round"/>';
+  let sub;
+  if(!sel){ sub = t("addFirst"); }
+  else {
+    const last = reports.find(r => r.placeId === sel.id);
+    sub = t("noVerified")+" "+place(sel);
+    if(last) sub += "\n"+t("lastReport")+": "+label.type(last).toLowerCase()+", "+ago(last.at)+" ("+t("unverified")+")";
+  }
+  el.innerHTML = '<svg viewBox="0 0 168 168" role="img" aria-label="'+t("unknown")+'">'+ring+bolt+'</svg>'+
+    '<div class="state" style="color:var(--grey)">'+t("unknown")+'</div>'+
+    '<div class="where" style="white-space:pre-line">'+esc(sub)+'</div>';
+}
+function renderPlaceSelects(){
+  const opts = places.map(p => '<option value="'+esc(p.id)+'"'+(p.id===selected?" selected":"")+'>'+esc(place(p))+'</option>').join("");
+  $("#rPlace").innerHTML = opts;
+  $("#rHint").textContent = places.length ? "" : t("hintNoPlace");
+  $("#pRegion").innerHTML = REGIONS.map(r => '<option>'+esc(r)+'</option>').join("");
+}
+function renderPlaces(){
+  const box = $("#pList");
+  if(!places.length){ box.innerHTML = '<p class="muted">'+t("noPlaces")+'</p>'; return; }
+  box.innerHTML = places.map(p =>
+    '<div class="item"><div><button class="btn" data-sel="'+esc(p.id)+'" style="min-height:40px'+(p.id===selected?";border-color:var(--yellow)":"")+'">'+esc(place(p))+'</button></div>'+
+    '<button class="btn danger" data-rm="'+esc(p.id)+'" style="min-height:40px">'+t("remove")+'</button></div>').join("");
+}
+function renderHistory(){
+  const box = $("#hList");
+  if(!reports.length){ box.innerHTML = '<p class="muted">'+t("noReports")+'</p>'; return; }
+  box.innerHTML = reports.map(r => {
+    const color = r.type === "POWER_OFF" ? "var(--red)" : "var(--green)";
+    return '<div class="item"><div><span class="dot" style="background:'+color+'"></span><strong>'+label.type(r)+'</strong>'+
+      '<div class="muted">'+esc(r.placeName)+' · '+label.scope(r)+'</div></div>'+
+      '<div style="text-align:right"><div class="muted">'+ago(r.at)+'</div>'+
+      '<span class="pill'+(r.synced?"":" warn")+'">'+(r.synced?t("synced"):t("pending"))+'</span></div></div>';
+  }).join("");
+}
+function renderAll(){ renderLamp(); renderPlaceSelects(); renderPlaces(); renderHistory(); }
+
+/* ---------- Navigation ---------- */
+function go(name){
+  document.querySelectorAll(".view").forEach(v => v.classList.toggle("on", v.id === "v-"+name));
+  document.querySelectorAll("nav button").forEach(b => b.setAttribute("aria-current", b.dataset.go === name ? "page" : "false"));
+  if(name === "map") showMap();
+  if(name === "history") renderHistory();
+  window.scrollTo(0,0);
+}
+document.querySelectorAll("nav button").forEach(b => b.addEventListener("click", () => go(b.dataset.go)));
+
+/* ---------- Places ---------- */
+$("#pAdd").addEventListener("click", () => {
+  const name = $("#pName").value.trim().replace(/\s+/g," ").slice(0,80);
+  const region = $("#pRegion").value;
+  if(!name){ toast(t("needName")); return; }
+  if(places.some(p => p.name.toLowerCase()===name.toLowerCase() && p.region===region)){ toast(t("placeExists")); return; }
+  const p = { id: uid(), name, region };
+  places.push(p); if(!selected) selected = p.id;
+  store.set("bo_places", places); store.set("bo_selected", selected);
+  $("#pName").value = ""; toast(t("placeAdded")); renderAll();
+});
+$("#pList").addEventListener("click", e => {
+  const s = e.target.closest("[data-sel]"), r = e.target.closest("[data-rm]");
+  if(s){ selected = s.dataset.sel; store.set("bo_selected", selected); renderAll(); }
+  if(r){
+    places = places.filter(p => p.id !== r.dataset.rm);
+    if(selected === r.dataset.rm) selected = places[0] ? places[0].id : null;
+    store.set("bo_places", places); store.set("bo_selected", selected); renderAll();
+  }
+});
+$("#rPlace").addEventListener("change", e => { selected = e.target.value; store.set("bo_selected", selected); renderLamp(); });
+
+/* ---------- Reporting ---------- */
+function getPosition(){
+  return new Promise(res => {
+    if(!navigator.geolocation){ res(null); return; }
+    navigator.geolocation.getCurrentPosition(
+      p => res({ lat: Math.round(p.coords.latitude*1000)/1000, lng: Math.round(p.coords.longitude*1000)/1000 }),
+      () => res(null), { enableHighAccuracy:false, timeout:8000, maximumAge:60000 });
+  });
+}
+async function submit(type, scope, withGeo){
+  const sel = places.find(p => p.id === selected);
+  if(!sel){ toast(t("needPlace")); go("places"); return; }
+  const recent = reports.find(r => r.placeId===sel.id && r.type===type && Date.now()-r.at < 120000);
+  if(recent){ toast(t("dup")); return; }
+  let geo = null;
+  if(withGeo){ geo = await getPosition(); if(!geo) toast(t("geoFail")); }
+  const r = { id: uid(), type, scope, placeId: sel.id, placeName: place(sel), region: sel.region, community: sel.name,
+              lat: geo ? geo.lat : null, lng: geo ? geo.lng : null, at: Date.now(), synced:false };
+  reports.unshift(r);
+  store.set("bo_reports", reports);
+  renderAll(); toast(t("saved"));
+  syncQueue();
+}
+$("#qOff").addEventListener("click", () => submit("POWER_OFF","NEIGHBOURHOOD",false));
+$("#qOn").addEventListener("click", () => submit("POWER_RESTORED","NEIGHBOURHOOD",false));
+$("#rSend").addEventListener("click", async () => {
+  await submit($("#rType").value, $("#rScope").value, $("#rGeo").checked);
+  go("history");
+});
+$("#hClear").addEventListener("click", () => {
+  if(!confirm(t("confirmClear"))) return;
+  reports = []; store.set("bo_reports", reports); renderAll();
+});
+
+/* ---------- Sync adapter (Supabase REST). Inactive until CONFIG is filled. ----------
+   Expected table public.outage_reports columns:
+   id uuid pk, type text, scope text, region text, community text, lat numeric null, lng numeric null, reported_at timestamptz */
+let syncing = false;
+async function syncQueue(){
+  if(!CONFIG.SUPABASE_URL || !CONFIG.SUPABASE_ANON_KEY || syncing || !navigator.onLine) return;
+  syncing = true;
+  try{
+    for(const r of reports.filter(x => !x.synced)){
+      const res = await fetch(CONFIG.SUPABASE_URL.replace(/\/$/,"")+"/rest/v1/outage_reports", {
+        method:"POST",
+        headers:{ "Content-Type":"application/json", apikey:CONFIG.SUPABASE_ANON_KEY, Authorization:"Bearer "+CONFIG.SUPABASE_ANON_KEY, Prefer:"return=minimal" },
+        body: JSON.stringify({ id:r.id, type:r.type, scope:r.scope, region:r.region, community:r.community, lat:r.lat, lng:r.lng, reported_at:new Date(r.at).toISOString() })
+      });
+      if(res.ok || res.status === 409){ r.synced = true; store.set("bo_reports", reports); }
+      else break; /* keep queued, retry later */
+    }
+  }catch(e){ /* offline or blocked: stays queued */ }
+  syncing = false; renderHistory();
+}
+window.addEventListener("online", syncQueue);
+
+/* ---------- Map ---------- */
+let map = null, layer = null;
+function showMap(){
+  if(typeof L === "undefined"){ $("#map").innerHTML = '<p class="muted" style="padding:16px">'+t("mapOffline")+'</p>'; return; }
+  if(!map){
+    map = L.map("map", { zoomControl:true }).setView([7.95,-1.02], 6);
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom:18, attribution:"&copy; OpenStreetMap contributors" }).addTo(map);
+    layer = L.layerGroup().addTo(map);
+  }
+  layer.clearLayers();
+  const pts = reports.filter(r => r.lat !== null);
+  pts.forEach(r => {
+    L.circleMarker([r.lat, r.lng], { radius:9, color: r.type==="POWER_OFF" ? "#FF453A" : "#2ECC71", fillOpacity:.6 })
+      .bindPopup(esc(label.type(r))+" · "+esc(ago(r.at))+" ("+t("unverified")+")").addTo(layer);
+  });
+  if(pts.length) map.fitBounds(L.latLngBounds(pts.map(r => [r.lat,r.lng])).pad(.4), { maxZoom:14 });
+  setTimeout(() => map.invalidateSize(), 50);
+  if(!pts.length) toast(t("noPins"));
+}
+
+/* ---------- Installable app (manifest built at runtime so everything stays in one file) ---------- */
+function makeIcon(sz){
+  const c = document.createElement("canvas"); c.width = c.height = sz;
+  const x = c.getContext("2d"), k = sz/64;
+  x.fillStyle = "#070B16"; x.fillRect(0,0,sz,sz);
+  x.fillStyle = "#FFD60A"; x.beginPath();
+  x.moveTo(36*k,6*k); x.lineTo(16*k,36*k); x.lineTo(30*k,36*k); x.lineTo(26*k,58*k); x.lineTo(48*k,26*k); x.lineTo(34*k,26*k);
+  x.closePath(); x.fill();
+  return c.toDataURL("image/png");
+}
+try{
+  const manifest = {
+    name:"BLACKOUT", short_name:"BLACKOUT", description:"Know before the lights go off.",
+    start_url: location.href.split("#")[0], scope: new URL("./", location.href).href,
+    display:"standalone", orientation:"portrait", background_color:"#070B16", theme_color:"#070B16",
+    icons:[ {src:makeIcon(192),sizes:"192x192",type:"image/png",purpose:"any"}, {src:makeIcon(512),sizes:"512x512",type:"image/png",purpose:"any"} ]
+  };
+  const link = document.createElement("link"); link.rel = "manifest";
+  link.href = URL.createObjectURL(new Blob([JSON.stringify(manifest)], {type:"application/manifest+json"}));
+  document.head.appendChild(link);
+  const ai = document.createElement("link"); ai.rel = "apple-touch-icon"; ai.href = makeIcon(180); document.head.appendChild(ai);
+}catch(e){ /* install still possible from the browser menu */ }
+let deferredInstall = null;
+window.addEventListener("beforeinstallprompt", e => { e.preventDefault(); deferredInstall = e; $("#installBtn").hidden = false; });
+$("#installBtn").addEventListener("click", async () => {
+  if(!deferredInstall) return;
+  deferredInstall.prompt(); deferredInstall = null; $("#installBtn").hidden = true;
+});
+window.addEventListener("appinstalled", () => { $("#installCard").hidden = true; });
+if(window.matchMedia("(display-mode: standalone)").matches || navigator.standalone){ $("#installCard").hidden = true; }
+
+/* ---------- Boot ---------- */
+renderStatic(); renderAll(); syncQueue();
+setInterval(() => { renderLamp(); }, 60000);
+</script>
+</body>
+</html>
